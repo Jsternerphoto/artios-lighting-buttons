@@ -9,45 +9,51 @@
   "buttons": [
     {
       "index": 0,
-      "macro": 1,
-      "label": "Macro 1",
-      "color": "#1E90FF",
-      "icon": null
+      "macro": 10,
+      "label": "OFF",
+      "color": "#1E1E1E",
+      "icon": "icons/lightbulb_off.png",
+      "prerendered": true
     },
     {
       "index": 1,
-      "macro": 2,
-      "label": "Macro 2",
-      "color": "#FF6347",
-      "icon": null
+      "macro": 11,
+      "label": "CLASS",
+      "color": "#228B22",
+      "icon": "icons/book.png",
+      "prerendered": true
     },
     {
       "index": 2,
-      "macro": 3,
-      "label": "Macro 3",
-      "color": "#32CD32",
-      "icon": null
+      "macro": 12,
+      "label": "PRESENT",
+      "color": "#1E64C8",
+      "icon": "icons/projector.png",
+      "prerendered": true
     },
     {
       "index": 3,
-      "macro": 4,
-      "label": "Macro 4",
-      "color": "#FFD700",
-      "icon": null
+      "macro": 13,
+      "label": "DRAMA",
+      "color": "#B41E1E",
+      "icon": "icons/curtain.png",
+      "prerendered": true
     },
     {
       "index": 4,
-      "macro": 5,
-      "label": "Macro 5",
-      "color": "#FF69B4",
-      "icon": null
+      "macro": 14,
+      "label": "WORK",
+      "color": "#D4760A",
+      "icon": "icons/gears.png",
+      "prerendered": true
     },
     {
       "index": 5,
-      "macro": 6,
-      "label": "Macro 6",
-      "color": "#00CED1",
-      "icon": null
+      "macro": 15,
+      "label": "PARTY!",
+      "color": "#000000",
+      "icon": "icons/party.png",
+      "prerendered": true
     }
   ]
 }

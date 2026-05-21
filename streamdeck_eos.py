@@ -69,6 +69,14 @@ def render_button_image(deck, label, color_hex):
     return PILHelper.to_native_format(deck, image)
 
 
+def render_prerendered_button(deck, icon_path):
+    """Load a pre-rendered full button image (icon + label + background baked in)."""
+    image = Image.open(icon_path).convert("RGB")
+    target = PILHelper.create_image(deck)
+    image = image.resize(target.size, Image.LANCZOS)
+    return PILHelper.to_native_format(deck, image)
+
+
 def render_icon_button(deck, icon_path, label, color_hex):
     """Create a button image with a colored background, icon, and label."""
     image = PILHelper.create_image(deck)
@@ -182,7 +190,9 @@ def main():
         if idx >= deck.key_count():
             continue
 
-        if btn.get("icon") and os.path.exists(btn["icon"]):
+        if btn.get("prerendered") and btn.get("icon") and os.path.exists(btn["icon"]):
+            image = render_prerendered_button(deck, btn["icon"])
+        elif btn.get("icon") and os.path.exists(btn["icon"]):
             image = render_icon_button(deck, btn["icon"], btn["label"], btn["color"])
         else:
             image = render_button_image(deck, btn["label"], btn["color"])
