@@ -1,83 +1,130 @@
-# ESP32-S3 Stream Deck Mini -> EOS Macro Controller
+# Stream Deck Mini -> EOS Macro Controller
 
-Turns an Elgato Stream Deck Mini into a dedicated macro trigger panel for ETC Element (EOS) lighting consoles. The ESP32-S3 acts as a USB host for the Stream Deck and sends OSC commands over WiFi to fire macros on the console.
+Turns an Elgato Stream Deck Mini into a dedicated macro trigger panel for ETC Element (EOS) lighting consoles. A Raspberry Pi Zero 2W reads button presses and sends OSC commands over WiFi to fire macros on the console.
 
 ```
-Stream Deck Mini  --USB-->  ESP32-S3  --WiFi/OSC-->  ETC Element (EOS)
+Stream Deck Mini  --USB-->  Raspberry Pi Zero 2W  --WiFi/OSC-->  ETC Element (EOS)
 ```
 
 ## Hardware Requirements
 
-- **ESP32-S3 DevKit** (any board with USB-OTG port, e.g. ESP32-S3-DevKitC-1)
+- **Raspberry Pi Zero 2W** (with micro-USB OTG port)
 - **Elgato Stream Deck Mini** (original or MK.2)
-- **USB-A to USB-C OTG adapter/cable** to connect the Stream Deck to the ESP32-S3's USB-OTG port
+- **Micro-USB OTG adapter** (micro-USB male to USB-A female)
+- **Micro-USB power supply** (5V 2.5A recommended) for the Pi's power port
+- **MicroSD card** (8GB+ with Raspberry Pi OS)
 - WiFi network shared with the ETC Element console
 
-### Important: USB Port Selection
+### Wiring
 
-The ESP32-S3 DevKit typically has **two USB ports**:
-- **USB-UART** - for programming/serial monitor (usually labeled UART or COM)
-- **USB-OTG** - for USB Host mode (connect the Stream Deck here)
+The Pi Zero 2W has two micro-USB ports:
 
-You must connect the Stream Deck Mini to the **USB-OTG** port.
+```
+[HDMI]  [USB/OTG]  [PWR]
+         Stream     Power
+         Deck       Supply
+```
+
+- **PWR** (right) — connect to power supply
+- **USB** (left) — connect Stream Deck Mini via OTG adapter
 
 ## Software Setup
 
-### 1. Arduino IDE Configuration
+### 1. Prepare the Raspberry Pi
 
-1. Open Arduino IDE
-2. Go to **File > Preferences**
-3. Add the ESP32 board manager URL if not already present:
+1. Flash **Raspberry Pi OS Lite** to your microSD card using [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+2. In the imager settings, configure:
+   - **WiFi**: your network SSID and password
+   - **SSH**: enable it
+   - **Username/password**: `pi` / your choice
+3. Insert the SD card and boot the Pi
+4. SSH in from your computer:
+   ```bash
+   ssh pi@raspberrypi.local
    ```
-   https://espressif.github.io/arduino-esp32/package_esp32_index.json
-   ```
-4. Go to **Tools > Board > Board Manager**, search for **esp32**, and install **esp32 by Espressif Systems**
-5. Select your board: **Tools > Board > ESP32S3 Dev Module**
-6. Set **USB Mode** to **USB-OTG (TinyUSB)** under Tools menu
-7. Set **Upload Mode** to **UART0 / Hardware CDC** (upload via the UART port)
 
-### 2. Install Required Library
+### 2. Install System Dependencies
 
-1. Go to **Sketch > Include Library > Manage Libraries**
-2. Search for **EspUsbHost** by tanakamasayuki
-3. Click **Install**
-
-### 3. Configure the Project
-
-1. Open `esp32-streamdeck-eos/esp32-streamdeck-eos.ino` in Arduino IDE
-2. Edit `config.h` with your settings:
-
-```c
-// Your WiFi credentials
-#define WIFI_SSID     "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
-
-// IP address of your ETC Element console
-#define EOS_IP        "192.168.1.100"
-
-// OSC receive port (default 8000)
-#define EOS_OSC_PORT  8000
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-venv libusb-1.0-0-dev libhidapi-libusb0 libjpeg-dev
 ```
 
-3. Adjust the macro mapping if needed (default maps buttons 0-5 to macros 1-6):
+### 3. Set Up USB Permissions
 
-```c
-const int MACRO_MAP[6] = {
-  1,  // Button 0 -> Macro 1
-  2,  // Button 1 -> Macro 2
-  3,  // Button 2 -> Macro 3
-  4,  // Button 3 -> Macro 4
-  5,  // Button 4 -> Macro 5
-  6   // Button 5 -> Macro 6
-};
+The Stream Deck needs udev rules to be accessible without root:
+
+```bash
+sudo tee /etc/udev/rules.d/99-streamdeck.rules << 'EOF'
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger
 ```
 
-### 4. Upload
+### 4. Install the Application
 
-1. Connect the ESP32-S3 via the **USB-UART** port
-2. Select the correct COM port under **Tools > Port**
-3. Click **Upload**
-4. Open **Serial Monitor** (115200 baud) to see status messages
+```bash
+cd ~
+git clone https://github.com/Jsternerphoto/esp32-streamdeck-eos.git streamdeck-eos
+cd streamdeck-eos
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 5. Configure
+
+Edit `config.json` with your EOS console settings:
+
+```json
+{
+  "eos": {
+    "ip": "192.168.1.51",
+    "osc_port": 8000
+  },
+  "buttons": [
+    { "index": 0, "macro": 1, "label": "Macro 1", "color": "#1E90FF" },
+    { "index": 1, "macro": 2, "label": "Macro 2", "color": "#FF6347" },
+    ...
+  ]
+}
+```
+
+Each button has:
+- **index**: button position (0-5)
+- **macro**: EOS macro number to fire
+- **label**: text shown on the button
+- **color**: background color (hex)
+- **icon**: optional path to a PNG icon file
+
+### 6. Test
+
+```bash
+source venv/bin/activate
+python streamdeck_eos.py
+```
+
+You should see the Stream Deck light up with your button labels, and pressing buttons should fire macros on the Element.
+
+### 7. Auto-Start on Boot
+
+```bash
+sudo cp streamdeck-eos.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable streamdeck-eos
+sudo systemctl start streamdeck-eos
+```
+
+Check status:
+```bash
+sudo systemctl status streamdeck-eos
+```
+
+View logs:
+```bash
+journalctl -u streamdeck-eos -f
+```
 
 ## EOS Console Setup
 
@@ -86,8 +133,8 @@ const int MACRO_MAP[6] = {
 1. Press **Displays** on the console
 2. Navigate to **Shell > Settings > Show Control > OSC**
 3. Enable **OSC RX** (receive)
-4. Set the **OSC RX Port** to match `EOS_OSC_PORT` in config.h (default: 8000)
-5. Note the console's **IP address** from Shell > Settings > Network and update `EOS_IP` in config.h
+4. Set the **OSC RX Port** to `8000` (or match your config.json)
+5. Note the console's **IP address** from Shell > Settings > Network
 
 ### Create Macros
 
@@ -99,44 +146,51 @@ Create the macros on the Element that you want to trigger. For example:
 
 ## Network Setup
 
-Both the ESP32-S3 and the ETC Element must be on the **same network**:
+Both the Pi and the ETC Element must be on the **same network**:
 
-1. Connect the ETC Element to your network via Ethernet (its primary network port)
-2. Ensure your WiFi router/access point is on the same subnet
-3. The ESP32-S3 connects via WiFi to the same network
-4. Verify connectivity: the ESP32 serial monitor will show its IP address on boot
-
-If your network uses VLANs or firewall rules, ensure UDP traffic on port 8000 is allowed between the ESP32 and the console.
+1. Connect the ETC Element via Ethernet
+2. The Pi Zero 2W connects via WiFi to the same network
+3. Ensure UDP traffic on port 8000 is allowed between them
 
 ## Button Layout
 
-The Stream Deck Mini has a 3x2 grid:
+```
++----------+----------+
+|  Btn 0   |  Btn 1   |
+|  Macro 1 |  Macro 2 |
++----------+----------+
+|  Btn 2   |  Btn 3   |
+|  Macro 3 |  Macro 4 |
++----------+----------+
+|  Btn 4   |  Btn 5   |
+|  Macro 5 |  Macro 6 |
++----------+----------+
+```
 
+## Customizing Buttons
+
+Edit `config.json` to change each button's label, color, and macro assignment.
+
+To use a custom icon on a button, add a PNG file and reference it:
+
+```json
+{
+  "index": 0,
+  "macro": 1,
+  "label": "Blackout",
+  "color": "#000000",
+  "icon": "icons/blackout.png"
+}
 ```
-+--------+--------+
-| Btn 0  | Btn 1  |
-| Macro1 | Macro2 |
-+--------+--------+
-| Btn 2  | Btn 3  |
-| Macro3 | Macro4 |
-+--------+--------+
-| Btn 4  | Btn 5  |
-| Macro5 | Macro6 |
-+--------+--------+
-```
+
+Icons should be square PNGs (any size — they'll be resized automatically).
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| "USB Host init failed" | Make sure Stream Deck is on the USB-OTG port, not USB-UART |
-| WiFi won't connect | Check SSID/password in config.h, ensure network is 2.4GHz (ESP32 doesn't support 5GHz) |
-| No response from console | Verify EOS_IP and EOS_OSC_PORT match console settings, check OSC RX is enabled |
-| Buttons not detected | Open Serial Monitor to see if HID data is being received, try unplugging/replugging the Stream Deck |
-
-## Supported Devices
-
-| Device | VID | PID | Supported |
-|--------|-----|-----|-----------|
-| Stream Deck Mini | 0x0FD9 | 0x0063 | Yes |
-| Stream Deck Mini MK.2 | 0x0FD9 | 0x0090 | Yes |
+| "No Stream Deck found" | Check USB OTG adapter, try `lsusb` to see if the device appears |
+| Permission denied | Make sure udev rules are installed (step 3) and reboot |
+| WiFi won't connect | Check `sudo raspi-config` > System Options > Wireless LAN |
+| No response from console | Verify IP/port in config.json, check OSC RX is enabled on the Element |
+| Buttons show but don't fire | Check `journalctl -u streamdeck-eos -f` for OSC errors |

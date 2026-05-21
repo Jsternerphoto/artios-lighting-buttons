@@ -1,0 +1,53 @@
+{
+  "wifi_note": "WiFi is configured via Raspberry Pi OS (raspi-config or /etc/wpa_supplicant). This file is for app settings only.",
+
+  "eos": {
+    "ip": "192.168.1.51",
+    "osc_port": 8000
+  },
+
+  "buttons": [
+    {
+      "index": 0,
+      "macro": 1,
+      "label": "Macro 1",
+      "color": "#1E90FF",
+      "icon": null
+    },
+    {
+      "index": 1,
+      "macro": 2,
+      "label": "Macro 2",
+      "color": "#FF6347",
+      "icon": null
+    },
+    {
+      "index": 2,
+      "macro": 3,
+      "label": "Macro 3",
+      "color": "#32CD32",
+      "icon": null
+    },
+    {
+      "index": 3,
+      "macro": 4,
+      "label": "Macro 4",
+      "color": "#FFD700",
+      "icon": null
+    },
+    {
+      "index": 4,
+      "macro": 5,
+      "label": "Macro 5",
+      "color": "#FF69B4",
+      "icon": null
+    },
+    {
+      "index": 5,
+      "macro": 6,
+      "label": "Macro 6",
+      "color": "#00CED1",
+      "icon": null
+    }
+  ]
+}

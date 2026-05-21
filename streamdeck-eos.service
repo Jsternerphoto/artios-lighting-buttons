@@ -1,0 +1,15 @@
+[Unit]
+Description=Stream Deck EOS Macro Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/streamdeck-eos
+ExecStart=/home/pi/streamdeck-eos/venv/bin/python streamdeck_eos.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
