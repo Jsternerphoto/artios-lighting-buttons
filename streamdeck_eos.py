@@ -21,6 +21,8 @@ from pythonosc.udp_client import SimpleUDPClient
 from StreamDeck.DeviceManager import DeviceManager
 from StreamDeck.ImageHelpers import PILHelper
 
+FLASH_STRENGTH = 0.75  # 0.0 = no flash, 1.0 = pure white
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -66,15 +68,14 @@ def render_button_image(deck, label, color_hex):
     y = (image.height - text_h) // 2
     draw.text((x, y), label, font=font, fill="white")
 
-    return PILHelper.to_native_format(deck, image)
+    return image
 
 
 def render_prerendered_button(deck, icon_path):
     """Load a pre-rendered full button image (icon + label + background baked in)."""
     image = Image.open(icon_path).convert("RGB")
     target = PILHelper.create_image(deck)
-    image = image.resize(target.size, Image.LANCZOS)
-    return PILHelper.to_native_format(deck, image)
+    return image.resize(target.size, Image.LANCZOS)
 
 
 def render_icon_button(deck, icon_path, label, color_hex):
@@ -113,7 +114,14 @@ def render_icon_button(deck, icon_path, label, color_hex):
     y = int(image.height * 0.72)
     draw.text((x, y), label, font=font, fill="white")
 
-    return PILHelper.to_native_format(deck, image)
+    return image
+
+
+def make_flash_image(image, strength=FLASH_STRENGTH):
+    """Blend the button image toward white for a brief press-confirmation flash."""
+    rgb = image.convert("RGB")
+    overlay = Image.new("RGB", rgb.size, (255, 255, 255))
+    return Image.blend(rgb, overlay, strength)
 
 
 # ---------------------------------------------------------------------------
@@ -130,27 +138,55 @@ def create_osc_client(config):
 def fire_macro(osc_client, macro_num):
     """Send /eos/macro/<num>/fire to the EOS console."""
     address = f"/eos/macro/{macro_num}/fire"
-    osc_client.send_message(address, None)
-    print(f"OSC -> {address}")
+    try:
+        osc_client.send_message(address, None)
+        print(f"OSC -> {address}")
+    except OSError as e:
+        # Console unreachable (wrong network, console off, etc).
+        # Log and keep running so the reader thread stays alive.
+        print(f"OSC FAILED {address}: {e}")
 
 
 # ---------------------------------------------------------------------------
 # Stream Deck button handler
 # ---------------------------------------------------------------------------
 
-def make_key_callback(osc_client, button_config):
+def make_key_callback(osc_client, button_config, deck, button_images):
     """Create the callback for Stream Deck key events."""
-    # Build a lookup from button index to macro number
-    macro_map = {}
-    for btn in button_config:
-        macro_map[btn["index"]] = btn["macro"]
+    btn_map = {btn["index"]: btn for btn in button_config}
+    # Track which toggle-buttons are currently in their "on" state
+    toggled_on = set()
 
-    def key_callback(deck, key, state):
-        if state:  # Fire on key press (not release)
-            macro_num = macro_map.get(key)
-            if macro_num is not None:
-                print(f"Button {key} pressed -> Macro {macro_num}")
-                fire_macro(osc_client, macro_num)
+    def key_callback(deck_arg, key, state):
+        btn = btn_map.get(key)
+        if btn is None:
+            return
+
+        # Visual feedback: hold the flash image while pressed, restore on release.
+        if key in button_images:
+            normal, flash = button_images[key]
+            deck.set_key_image(key, flash if state else normal)
+
+        if not state:  # Fire macro on press only, not release
+            return
+
+        toggle_macro = btn.get("toggle_macro")
+        if toggle_macro is not None and key in toggled_on:
+            # Second press: fire release macro and clear the toggle
+            macro_num = toggle_macro
+            toggled_on.discard(key)
+        else:
+            macro_num = btn["macro"]
+            if toggle_macro is not None:
+                toggled_on.add(key)
+            # Any non-toggle press resets every active toggle, since
+            # those macros override the effect on the console.
+            for other_key in list(toggled_on):
+                if other_key != key:
+                    toggled_on.discard(other_key)
+
+        print(f"Button {key} pressed -> Macro {macro_num}")
+        fire_macro(osc_client, macro_num)
 
     return key_callback
 
@@ -184,26 +220,33 @@ def main():
     print(f"Found: {deck.deck_type()} (serial: {deck.get_serial_number()})")
     print(f"Keys: {deck.key_count()}")
 
-    # Set button images
+    # Render each button to PIL, cache both normal and flash variants in
+    # native format so the press callback can swap them instantly.
+    button_images = {}
     for btn in config["buttons"]:
         idx = btn["index"]
         if idx >= deck.key_count():
             continue
 
         if btn.get("prerendered") and btn.get("icon") and os.path.exists(btn["icon"]):
-            image = render_prerendered_button(deck, btn["icon"])
+            pil = render_prerendered_button(deck, btn["icon"])
         elif btn.get("icon") and os.path.exists(btn["icon"]):
-            image = render_icon_button(deck, btn["icon"], btn["label"], btn["color"])
+            pil = render_icon_button(deck, btn["icon"], btn["label"], btn["color"])
         else:
-            image = render_button_image(deck, btn["label"], btn["color"])
+            pil = render_button_image(deck, btn["label"], btn["color"])
 
-        deck.set_key_image(idx, image)
+        normal = PILHelper.to_native_format(deck, pil)
+        flash = PILHelper.to_native_format(deck, make_flash_image(pil))
+        button_images[idx] = (normal, flash)
+        deck.set_key_image(idx, normal)
 
     # Set brightness
     deck.set_brightness(80)
 
     # Register button callback
-    deck.set_key_callback(make_key_callback(osc_client, config["buttons"]))
+    deck.set_key_callback(
+        make_key_callback(osc_client, config["buttons"], deck, button_images)
+    )
 
     print("Ready. Press Ctrl+C to exit.")
 

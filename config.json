@@ -50,6 +50,7 @@
     {
       "index": 5,
       "macro": 15,
+      "toggle_macro": 16,
       "label": "PARTY!",
       "color": "#000000",
       "icon": "icons/party.png",
