@@ -32,42 +32,45 @@ The Pi Zero 2W has two micro-USB ports:
 
 ### 1. Prepare the Raspberry Pi
 
-1. Flash **Raspberry Pi OS Lite** to your microSD card using [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
-2. In the imager settings, configure:
-   - **WiFi**: your network SSID and password
-   - **SSH**: enable it
-   - **Username/password**: `pi` / your choice
-3. Insert the SD card and boot the Pi
+1. Flash **Raspberry Pi OS Lite (64-bit)** to your microSD card using [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
+2. In the imager **gear menu (settings)**, configure:
+   - **Hostname**: `streamdeck`
+   - **Username/password**: `pi` / your choice (save it to a password manager)
+   - **Set authorized SSH key**: yes (uses your local public key, lets you skip the password)
+   - **WiFi**: your 2.4 GHz network SSID and password (Pi Zero 2W is 2.4 GHz only — confirm your SSID actually broadcasts on 2.4 GHz)
+   - **WiFi country**: USA (required for WiFi to come up)
+3. Insert the SD card and boot the Pi. First boot takes 1–2 minutes.
 4. SSH in from your computer:
    ```bash
-   ssh pi@raspberrypi.local
+   ssh pi@streamdeck.local
    ```
+   If `streamdeck.local` doesn't resolve, find the Pi's IP via your router's DHCP client list or `arp -a` (look for a MAC starting with `b8:27:eb`, `dc:a6:32`, `d8:3a:dd`, `e4:5f:01`, or `2c:cf:67`) and SSH to that IP.
 
 ### 2. Install System Dependencies
 
 ```bash
 sudo apt update
-sudo apt install -y python3-pip python3-venv libusb-1.0-0-dev libhidapi-libusb0 libjpeg-dev
+sudo apt install -y git python3-pip python3-venv libusb-1.0-0-dev libhidapi-libusb0 libhidapi-hidraw0 libjpeg-dev zlib1g-dev
 ```
 
 ### 3. Set Up USB Permissions
 
-The Stream Deck needs udev rules to be accessible without root:
+The Stream Deck needs udev rules to be accessible without root. Use `MODE="0666"` rather than the `uaccess` tag — `uaccess` requires an active logind session, which a plain SSH connection does not provide, and you'll get "Could not open HID device" errors at runtime.
 
 ```bash
-sudo tee /etc/udev/rules.d/99-streamdeck.rules << 'EOF'
-SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", TAG+="uaccess"
-EOF
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", MODE="0666"' | sudo tee /etc/udev/rules.d/70-streamdeck.rules
 sudo udevadm control --reload-rules
-sudo udevadm trigger
+sudo udevadm trigger --action=add
 ```
+
+**Important**: after installing the rule, **unplug the Stream Deck from the Pi and plug it back in**. Already-connected devices don't pick up new rules until they're re-attached.
 
 ### 4. Install the Application
 
 ```bash
 cd ~
-git clone https://github.com/Jsternerphoto/esp32-streamdeck-eos.git streamdeck-eos
-cd streamdeck-eos
+git clone https://github.com/Jsternerphoto/artios-lighting-buttons.git
+cd artios-lighting-buttons
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -190,7 +193,9 @@ Icons should be square PNGs (any size — they'll be resized automatically).
 | Problem | Solution |
 |---------|----------|
 | "No Stream Deck found" | Check USB OTG adapter, try `lsusb` to see if the device appears |
-| Permission denied | Make sure udev rules are installed (step 3) and reboot |
-| WiFi won't connect | Check `sudo raspi-config` > System Options > Wireless LAN |
+| "Could not open HID device" | udev rule needs `MODE="0666"` (not `uaccess`) — see step 3. After fixing, **unplug + replug the Stream Deck**. |
+| "Probe failed to find any functional HID backend" | Missing `libhidapi-libusb0` — install it (`sudo apt install -y libhidapi-libusb0`) |
+| Permission denied | Make sure udev rules are installed (step 3), unplug + replug the Stream Deck |
+| WiFi won't connect | Pi Zero 2W is 2.4 GHz only — confirm SSID broadcasts on 2.4 GHz, double-check the password (no way to verify until first boot), and that WiFi country is set in the imager |
 | No response from console | Verify IP/port in config.json, check OSC RX is enabled on the Element |
 | Buttons show but don't fire | Check `journalctl -u streamdeck-eos -f` for OSC errors |
