@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/streamdeck-eos
-ExecStart=/home/pi/streamdeck-eos/venv/bin/python streamdeck_eos.py
+WorkingDirectory=/home/pi/artios-lighting-buttons
+ExecStart=/home/pi/artios-lighting-buttons/venv/bin/python streamdeck_eos.py
 Restart=on-failure
 RestartSec=5
 
